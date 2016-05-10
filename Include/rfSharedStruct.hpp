@@ -106,6 +106,7 @@ struct rfWheel {
   bool detached;                // whether wheel is detached
 };
 
+// scoring info only updates twice per second!
 struct rfVehicleInfo {
   char driverName[32];          // driver name
   char vehicleName[64];         // vehicle name
@@ -143,7 +144,17 @@ struct rfVehicleInfo {
 
   // Position and derivatives
   rfVec3 pos;					// world position in meters
-  float speed;					// meters/sec
+  rfVec3 localVel;          // velocity (meters/sec) in local vehicle coordinates
+  rfVec3 localAccel;        // acceleration (meters/sec^2) in local vehicle coordinates
+  
+  // Orientation and derivatives
+  rfVec3 oriX;              // top row of orientation matrix (also converts local vehicle vectors into world X using dot product)
+  rfVec3 oriY;              // mid row of orientation matrix (also converts local vehicle vectors into world Y using dot product)
+  rfVec3 oriZ;              // bot row of orientation matrix (also converts local vehicle vectors into world Z using dot product)
+  rfVec3 localRot;          // rotation (radians/sec) in local vehicle coordinates
+  rfVec3 localRotAccel;     // rotational acceleration (radians/sec^2) in local vehicle coordinates
+
+  float speed;				// meters/sec
 };
 
 struct rfShared {
@@ -196,7 +207,7 @@ struct rfShared {
 
   rfWheel wheel[4];        // wheel info (front left, front right, rear left, rear right)
 
-  // scoring info
+  // scoring info only updates twice per second!
   long session;                 // current session
   float currentET;              // current time
   float endET;                  // ending time

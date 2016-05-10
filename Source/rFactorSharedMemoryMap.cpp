@@ -232,6 +232,13 @@ void SharedMemoryMapPlugin::UpdateScoring( const ScoringInfoV2 &info ) {
 			pBuf->vehicle[i].lapsBehindLeader = info.mVehicle[i].mLapsBehindLeader;
 			pBuf->vehicle[i].lapStartET = info.mVehicle[i].mLapStartET;
 			pBuf->vehicle[i].pos = { info.mVehicle[i].mPos.x, info.mVehicle[i].mPos.y, info.mVehicle[i].mPos.z };
+			pBuf->vehicle[i].localVel = { info.mVehicle[i].mLocalVel.x, info.mVehicle[i].mLocalVel.y, info.mVehicle[i].mLocalVel.z };
+			pBuf->vehicle[i].localAccel = { info.mVehicle[i].mLocalAccel.x, info.mVehicle[i].mLocalAccel.y, info.mVehicle[i].mLocalAccel.z };
+			pBuf->vehicle[i].oriX = { info.mVehicle[i].mOriX.x, info.mVehicle[i].mOriX.y, info.mVehicle[i].mOriX.z };
+			pBuf->vehicle[i].oriY = { info.mVehicle[i].mOriY.x, info.mVehicle[i].mOriY.y, info.mVehicle[i].mOriY.z };
+			pBuf->vehicle[i].oriZ = { info.mVehicle[i].mOriZ.x, info.mVehicle[i].mOriZ.y, info.mVehicle[i].mOriZ.z };
+			pBuf->vehicle[i].localRot = { info.mVehicle[i].mLocalRot.x, info.mVehicle[i].mLocalRot.y, info.mVehicle[i].mLocalRot.z };
+			pBuf->vehicle[i].localRotAccel = { info.mVehicle[i].mLocalRotAccel.x, info.mVehicle[i].mLocalRotAccel.y, info.mVehicle[i].mLocalRotAccel.z };
 			pBuf->vehicle[i].speed = sqrtf((info.mVehicle[i].mLocalVel.x * info.mVehicle[i].mLocalVel.x) +
 				(info.mVehicle[i].mLocalVel.y * info.mVehicle[i].mLocalVel.y) +
 				(info.mVehicle[i].mLocalVel.z * info.mVehicle[i].mLocalVel.z));
