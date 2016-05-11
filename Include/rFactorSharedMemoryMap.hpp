@@ -11,6 +11,7 @@ private variables to track the current state of the memory map handle and buffer
 #include "InternalsPlugin.hpp"
 #include "rfSharedStruct.hpp"
 #include <Windows.h>
+#include <time.h>
 
 #define PLUGIN_NAME "rFactorSharedMemoryMap"
 
@@ -72,42 +73,44 @@ class SharedMemoryMapPlugin : public InternalsPluginV3
   void Startup();         // game startup
   void Shutdown();        // game shutdown
 
-  void EnterRealtime() {}   // entering realtime
-  void ExitRealtime() {}    // exiting realtime
+  void EnterRealtime();   // entering realtime
+  void ExitRealtime();    // exiting realtime
 
-  void StartSession() {}    // session has started
-  void EndSession() {}      // session has ended
+  void StartSession();    // session has started
+  void EndSession();      // session has ended
 
   // GAME OUTPUT
-  bool WantsTelemetryUpdates() { return( true ); } // CHANGE TO TRUE TO ENABLE TELEMETRY EXAMPLE!
+  bool WantsTelemetryUpdates() { return( true ); }
   void UpdateTelemetry( const TelemInfoV2 &info );
 
-  bool WantsGraphicsUpdates() { return( false ); } // CHANGE TO TRUE TO ENABLE GRAPHICS EXAMPLE!
+  bool WantsGraphicsUpdates() { return( false ); }
   void UpdateGraphics( const GraphicsInfoV2 &info ) {}
 
   // GAME INPUT
-  bool HasHardwareInputs() { return( false ); } // CHANGE TO TRUE TO ENABLE HARDWARE EXAMPLE!
-  void UpdateHardware( const float fDT ) {} // update the hardware with the time between frames
-  void EnableHardware() {}             // message from game to enable hardware
-  void DisableHardware() {}           // message from game to disable hardware
+  bool HasHardwareInputs() { return( false ); }
+  void UpdateHardware( const float fDT ) {}
+  void EnableHardware() {}
+  void DisableHardware() {}
 
-  // See if the plugin wants to take over a hardware control.  If the plugin takes over the
-  // control, this method returns true and sets the value of the float pointed to by the
-  // second arg.  Otherwise, it returns false and leaves the float unmodified.
   bool CheckHWControl( const char * const controlName, float &fRetVal ) { return( false ); }
 
-  bool ForceFeedback( float &forceValue ) { return( false ); }  // SEE FUNCTION BODY TO ENABLE FORCE EXAMPLE
+  bool ForceFeedback( float &forceValue ) { return( false ); }
 
   // SCORING OUTPUT
-  bool WantsScoringUpdates() { return( true ); } // CHANGE TO TRUE TO ENABLE SCORING EXAMPLE!
+  bool WantsScoringUpdates() { return( true ); }
   void UpdateScoring( const ScoringInfoV2 &info );
 
   // COMMENTARY INPUT
-  bool RequestCommentary( CommentaryRequestInfo &info ) { return( false ); }  // SEE FUNCTION BODY TO ENABLE COMMENTARY EXAMPLE
+  bool RequestCommentary( CommentaryRequestInfo &info ) { return( false ); }
 
  private:
 
   HANDLE hMap;
   rfShared* pBuf;
   bool mapped;
+  clock_t cLastTelemUpdate;
+  float cDelta;
+  clock_t cLastScoringUpdate;
+  bool inSession;
+  bool inRealtime;
 };

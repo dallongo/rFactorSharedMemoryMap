@@ -6,7 +6,9 @@
  Provides a basic memory map export of the telemetry and scoring data
  The export is nearly 1:1 with redundant/gratuitous data removed from the 
  vehicle info array and the addition of vehicle speed being pre-calculated
- since everyone needs that anyway.
+ since everyone needs that anyway. Position, rotation, and orientation are
+ interpolated in between scoring updates (every 0.5 seconds). True raw values 
+ are given when deltaTime == 0.
 */
 
 #include "rFactorSharedMemoryMap.hpp"
@@ -17,7 +19,7 @@
 // plugin information
 unsigned g_uPluginID          = 0;
 char     g_szPluginName[]     = PLUGIN_NAME;
-unsigned g_uPluginVersion     = 001;
+unsigned g_uPluginVersion     = 002;
 unsigned g_uPluginObjectCount = 1;
 InternalsPluginInfo g_PluginInfo;
 
@@ -92,11 +94,17 @@ void SharedMemoryMapPlugin::Startup() {
 		return;
 	}
 	mapped = TRUE;
+	if (mapped) {
+		memset(pBuf, 0, sizeof(rfShared));
+	}
 	return;
 }
 
 void SharedMemoryMapPlugin::Shutdown() {
 	// release buffer and close handle
+	if (mapped) {
+		memset(pBuf, 0, sizeof(rfShared));
+	}
 	if (pBuf) {
 		UnmapViewOfFile(pBuf);
 	}
@@ -106,10 +114,42 @@ void SharedMemoryMapPlugin::Shutdown() {
 	mapped = FALSE;
 }
 
+void SharedMemoryMapPlugin::StartSession() {
+	// zero-out buffer at start of session
+	if (mapped) {
+		memset(pBuf, 0, sizeof(rfShared));
+	}
+	cLastTelemUpdate = 0;
+	cLastScoringUpdate = 0;
+	cDelta = 0;
+	inSession = TRUE;
+}
+
+void SharedMemoryMapPlugin::EndSession() {
+	// zero-out buffer at end of session
+	StartSession();
+	inSession = FALSE;
+}
+
+void SharedMemoryMapPlugin::EnterRealtime() {
+	inRealtime = TRUE;
+}
+
+void SharedMemoryMapPlugin::ExitRealtime() {
+	inRealtime = FALSE;
+}
+
 void SharedMemoryMapPlugin::UpdateTelemetry( const TelemInfoV2 &info ) {
 	if (mapped) {
+		// update clock delta
+		if (!cLastTelemUpdate) {
+			cLastTelemUpdate = clock();
+		}
+		cDelta = (float)(clock() - cLastTelemUpdate) / (float)CLOCKS_PER_SEC;
+		cLastTelemUpdate = clock();
+
 		// TelemInfoBase
-		pBuf->deltaTime = info.mDeltaTime;
+		pBuf->deltaTime = (float)(clock() - cLastScoringUpdate) / (float)CLOCKS_PER_SEC;
 		pBuf->lapNumber = info.mLapNumber;
 		pBuf->lapStartET = info.mLapStartET;
 		strcpy(pBuf->vehicleName, info.mVehicleName);
@@ -170,11 +210,94 @@ void SharedMemoryMapPlugin::UpdateTelemetry( const TelemInfoV2 &info ) {
 			pBuf->wheel[i].flat = info.mWheel[i].mFlat;
 			pBuf->wheel[i].detached = info.mWheel[i].mDetached;
 		}
+
+		// interpolation of scoring info
+		// ScoringInfoBase
+		pBuf->currentET += cDelta;
+
+		// ScoringInfoV2
+		pBuf->inRealtime = inRealtime;
+
+		for (int i = 0; i < pBuf->numVehicles; i++) {
+			// VehicleScoringInfoV2
+			// applying acceleration only seems to make the interpolation worse since acceleration changes so quickly
+			//pBuf->vehicle[i].localRot.x += pBuf->vehicle[i].localRotAccel.x * cDelta;
+			//pBuf->vehicle[i].localRot.y += pBuf->vehicle[i].localRotAccel.y * cDelta;
+			//pBuf->vehicle[i].localRot.z += pBuf->vehicle[i].localRotAccel.z * cDelta;
+			//pBuf->vehicle[i].localVel.x += pBuf->vehicle[i].localAccel.x * cDelta;
+			//pBuf->vehicle[i].localVel.y += pBuf->vehicle[i].localAccel.y * cDelta;
+			//pBuf->vehicle[i].localVel.z += pBuf->vehicle[i].localAccel.z * cDelta;
+			pBuf->vehicle[i].pos.x += ( (pBuf->vehicle[i].oriX.x * pBuf->vehicle[i].localVel.x) + 
+										(pBuf->vehicle[i].oriX.y * pBuf->vehicle[i].localVel.y) + 
+										(pBuf->vehicle[i].oriX.z * pBuf->vehicle[i].localVel.z) ) * cDelta;
+			pBuf->vehicle[i].pos.y += ( (pBuf->vehicle[i].oriY.x * pBuf->vehicle[i].localVel.x) +
+										(pBuf->vehicle[i].oriY.y * pBuf->vehicle[i].localVel.y) +
+										(pBuf->vehicle[i].oriY.z * pBuf->vehicle[i].localVel.z) ) * cDelta;
+			pBuf->vehicle[i].pos.z += ( (pBuf->vehicle[i].oriZ.x * pBuf->vehicle[i].localVel.x) +
+										(pBuf->vehicle[i].oriZ.y * pBuf->vehicle[i].localVel.y) +
+										(pBuf->vehicle[i].oriZ.z * pBuf->vehicle[i].localVel.z) ) * cDelta;
+			// rotate and normalize orientation vectors (normalizing shouldn't be necessary if this is correct)
+			rfVec3 oriX = { 0 };
+			rfVec3 oriY = { 0 };
+			rfVec3 oriZ = { 0 };
+			float oriXlen = 0;
+			rfVec3 wRot = { (oriX.x * pBuf->vehicle[i].localRot.x) + (oriX.y * pBuf->vehicle[i].localRot.y) + (oriX.z * pBuf->vehicle[i].localRot.z),
+							(oriY.x * pBuf->vehicle[i].localRot.x) + (oriY.y * pBuf->vehicle[i].localRot.y) + (oriY.z * pBuf->vehicle[i].localRot.z), 
+							(oriZ.x * pBuf->vehicle[i].localRot.x) + (oriZ.y * pBuf->vehicle[i].localRot.y) + (oriZ.z * pBuf->vehicle[i].localRot.z) };
+			// rotate by z
+			oriZ.x = pBuf->vehicle[i].oriX.x * cosf(wRot.z * cDelta) - pBuf->vehicle[i].oriX.y * sinf(wRot.z * cDelta);
+			oriZ.y = pBuf->vehicle[i].oriX.x * sinf(wRot.z * cDelta) + pBuf->vehicle[i].oriX.y * cosf(wRot.z * cDelta);
+			oriZ.z = pBuf->vehicle[i].oriX.z;
+			// rotate by y
+			oriY.x = oriZ.x * cosf(wRot.y * cDelta) + oriZ.z * sinf(wRot.y * cDelta);
+			oriY.y = oriZ.y;
+			oriY.z = oriZ.z * cosf(wRot.y * cDelta) - oriZ.x * sinf(wRot.y * cDelta);
+			// rotate by x
+			oriX.x = oriY.x;
+			oriX.y = oriY.y * cosf(wRot.x * cDelta) - oriY.z * sinf(wRot.x * cDelta);
+			oriX.z = oriY.y * sinf(wRot.x * cDelta) + oriY.z * cosf(wRot.x * cDelta);
+			oriXlen = sqrtf(oriX.x * oriX.x + oriX.y * oriX.y + oriX.z * oriX.z);
+			// rotate by z
+			oriZ.x = pBuf->vehicle[i].oriY.x * cosf(wRot.z * cDelta) - pBuf->vehicle[i].oriY.y * sinf(wRot.z * cDelta);
+			oriZ.y = pBuf->vehicle[i].oriY.x * sinf(wRot.z * cDelta) + pBuf->vehicle[i].oriY.y * cosf(wRot.z * cDelta);
+			oriZ.z = pBuf->vehicle[i].oriY.z;
+			// rotate by y
+			oriY.x = oriZ.x * cosf(wRot.y * cDelta) + oriZ.z * sinf(wRot.y * cDelta);
+			oriY.y = oriZ.y;
+			oriY.z = oriZ.z * cosf(wRot.y * cDelta) - oriZ.x * sinf(wRot.y * cDelta);
+			// rotate by x
+			oriX.x = oriY.x;
+			oriX.y = oriY.y * cosf(wRot.x * cDelta) - oriY.z * sinf(wRot.x * cDelta);
+			oriX.z = oriY.y * sinf(wRot.x * cDelta) + oriY.z * cosf(wRot.x * cDelta);
+			oriXlen = sqrtf(oriX.x * oriX.x + oriX.y * oriX.y + oriX.z * oriX.z);
+			// rotate by z
+			oriZ.x = pBuf->vehicle[i].oriZ.x * cosf(wRot.z * cDelta) - pBuf->vehicle[i].oriZ.y * sinf(wRot.z * cDelta);
+			oriZ.y = pBuf->vehicle[i].oriZ.x * sinf(wRot.z * cDelta) + pBuf->vehicle[i].oriZ.y * cosf(wRot.z * cDelta);
+			oriZ.z = pBuf->vehicle[i].oriZ.z;
+			// rotate by y
+			oriY.x = oriZ.x * cosf(wRot.y * cDelta) + oriZ.z * sinf(wRot.y * cDelta);
+			oriY.y = oriZ.y;
+			oriY.z = oriZ.z * cosf(wRot.y * cDelta) - oriZ.x * sinf(wRot.y * cDelta);
+			// rotate by x
+			oriX.x = oriY.x;
+			oriX.y = oriY.y * cosf(wRot.x * cDelta) - oriY.z * sinf(wRot.x * cDelta);
+			oriX.z = oriY.y * sinf(wRot.x * cDelta) + oriY.z * cosf(wRot.x * cDelta);
+			oriXlen = sqrtf(oriX.x * oriX.x + oriX.y * oriX.y + oriX.z * oriX.z);
+			pBuf->vehicle[i].oriZ = { oriX.x / oriXlen, oriX.y / oriXlen, oriX.z / oriXlen };
+			// interpolate speed
+			pBuf->vehicle[i].speed = sqrtf( (pBuf->vehicle[i].localVel.x * pBuf->vehicle[i].localVel.x) +
+											(pBuf->vehicle[i].localVel.y * pBuf->vehicle[i].localVel.y) +
+											(pBuf->vehicle[i].localVel.z * pBuf->vehicle[i].localVel.z) );
+
+			// VehicleScoringInfo
+			pBuf->vehicle[i].lapDist -= pBuf->vehicle[i].localVel.z * cDelta;
+		}
 	}
 }
 
 void SharedMemoryMapPlugin::UpdateScoring( const ScoringInfoV2 &info ) {
 	if (mapped) {
+		cLastScoringUpdate = clock();
 		// ScoringInfoBase
 		pBuf->session = info.mSession;
 		pBuf->currentET = info.mCurrentET;
@@ -191,7 +314,7 @@ void SharedMemoryMapPlugin::UpdateScoring( const ScoringInfoV2 &info ) {
 		}
 		pBuf->startLight = info.mStartLight;
 		pBuf->numRedLights = info.mNumRedLights;
-		pBuf->inRealtime = info.mInRealtime;
+		pBuf->inRealtime = inRealtime;
 		strcpy(pBuf->playerName, info.mPlayerName);
 		strcpy(pBuf->plrFileName, info.mPlrFileName);
 		pBuf->ambientTemp = info.mAmbientTemp;
@@ -242,7 +365,6 @@ void SharedMemoryMapPlugin::UpdateScoring( const ScoringInfoV2 &info ) {
 			pBuf->vehicle[i].speed = sqrtf((info.mVehicle[i].mLocalVel.x * info.mVehicle[i].mLocalVel.x) +
 				(info.mVehicle[i].mLocalVel.y * info.mVehicle[i].mLocalVel.y) +
 				(info.mVehicle[i].mLocalVel.z * info.mVehicle[i].mLocalVel.z));
-
 		}
 	}
 }

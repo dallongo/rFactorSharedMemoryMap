@@ -106,7 +106,7 @@ struct rfWheel {
   bool detached;                // whether wheel is detached
 };
 
-// scoring info only updates twice per second!
+// scoring info only updates twice per second (values interpolated when deltaTime > 0)!
 struct rfVehicleInfo {
   char driverName[32];          // driver name
   char vehicleName[64];         // vehicle name
@@ -159,7 +159,7 @@ struct rfVehicleInfo {
 
 struct rfShared {
   // Time
-  float deltaTime;              // time since last update (seconds)
+  float deltaTime;              // time since last scoring update (seconds)
   long lapNumber;               // current lap number
   float lapStartET;             // time this lap was started
   char vehicleName[64];         // current vehicle name
@@ -207,7 +207,7 @@ struct rfShared {
 
   rfWheel wheel[4];        // wheel info (front left, front right, rear left, rear right)
 
-  // scoring info only updates twice per second!
+  // scoring info only updates twice per second (values interpolated when deltaTime > 0)!
   long session;                 // current session
   float currentET;              // current time
   float endET;                  // ending time
