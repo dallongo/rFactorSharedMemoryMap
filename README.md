@@ -8,6 +8,13 @@ Details of the shared memory map can be found in `Include\rfSharedStruct.hpp`. T
 A sample application using Python to access the memory map can be found in https://github.com/dallongo/pySRD9c.
 
 ### Releases
+#### 2016-05-11 (v2.0.0.0)
+
+* Added Vehicle Info interpolation between Scoring updates
+* Changed meaning of deltaTime to be time since last Scoring update
+* Changed inRealtime to be set/unset by Enter/ExitRealtime methods
+* Added clean up before and after each session
+
 #### 2016-05-09 (v1.1.0.0)
 
 * Updated `rfVehicleInfo` to include acceleration and rotation vectors
