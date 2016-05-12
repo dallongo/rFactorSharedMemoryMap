@@ -257,6 +257,7 @@ void SharedMemoryMapPlugin::UpdateTelemetry( const TelemInfoV2 &info ) {
 			oriX.y = oriY.y * cosf(wRot.x * cDelta) - oriY.z * sinf(wRot.x * cDelta);
 			oriX.z = oriY.y * sinf(wRot.x * cDelta) + oriY.z * cosf(wRot.x * cDelta);
 			oriXlen = sqrtf(oriX.x * oriX.x + oriX.y * oriX.y + oriX.z * oriX.z);
+			pBuf->vehicle[i].oriX = { oriX.x / oriXlen, oriX.y / oriXlen, oriX.z / oriXlen };
 			// rotate by z
 			oriZ.x = pBuf->vehicle[i].oriY.x * cosf(wRot.z * cDelta) - pBuf->vehicle[i].oriY.y * sinf(wRot.z * cDelta);
 			oriZ.y = pBuf->vehicle[i].oriY.x * sinf(wRot.z * cDelta) + pBuf->vehicle[i].oriY.y * cosf(wRot.z * cDelta);
@@ -270,6 +271,7 @@ void SharedMemoryMapPlugin::UpdateTelemetry( const TelemInfoV2 &info ) {
 			oriX.y = oriY.y * cosf(wRot.x * cDelta) - oriY.z * sinf(wRot.x * cDelta);
 			oriX.z = oriY.y * sinf(wRot.x * cDelta) + oriY.z * cosf(wRot.x * cDelta);
 			oriXlen = sqrtf(oriX.x * oriX.x + oriX.y * oriX.y + oriX.z * oriX.z);
+			pBuf->vehicle[i].oriY = { oriX.x / oriXlen, oriX.y / oriXlen, oriX.z / oriXlen };
 			// rotate by z
 			oriZ.x = pBuf->vehicle[i].oriZ.x * cosf(wRot.z * cDelta) - pBuf->vehicle[i].oriZ.y * sinf(wRot.z * cDelta);
 			oriZ.y = pBuf->vehicle[i].oriZ.x * sinf(wRot.z * cDelta) + pBuf->vehicle[i].oriZ.y * cosf(wRot.z * cDelta);
