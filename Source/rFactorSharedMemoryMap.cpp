@@ -189,6 +189,14 @@ void SharedMemoryMapPlugin::UpdateTelemetry( const TelemInfoV2 &info ) {
 		pBuf->lastImpactMagnitude = info.mLastImpactMagnitude;
 		pBuf->lastImpactPos = { info.mLastImpactPos.x, info.mLastImpactPos.y, info.mLastImpactPos.z };
 
+		// Automobilista
+		pBuf->drsState = info.mDrsState;
+		pBuf->drsActive = info.mDrsActive;
+		pBuf->ptpState = info.mPushToPassState;
+		pBuf->gearboxGrinding = info.mGearboxGrinding;
+		pBuf->gearboxDamage = info.mGearboxDamage;
+		pBuf->engineBoostMapping = info.mEngineBoostMapping;
+
 		for (int i = 0; i < 4; i++) {
 			// TelemWheel
 			pBuf->wheel[i].rotation = info.mWheel[i].mRotation;
@@ -220,13 +228,13 @@ void SharedMemoryMapPlugin::UpdateTelemetry( const TelemInfoV2 &info ) {
 
 		for (int i = 0; i < pBuf->numVehicles; i++) {
 			// VehicleScoringInfoV2
-			// applying acceleration only seems to make the interpolation worse since acceleration changes so quickly
-			//pBuf->vehicle[i].localRot.x += pBuf->vehicle[i].localRotAccel.x * cDelta;
-			//pBuf->vehicle[i].localRot.y += pBuf->vehicle[i].localRotAccel.y * cDelta;
-			//pBuf->vehicle[i].localRot.z += pBuf->vehicle[i].localRotAccel.z * cDelta;
-			//pBuf->vehicle[i].localVel.x += pBuf->vehicle[i].localAccel.x * cDelta;
-			//pBuf->vehicle[i].localVel.y += pBuf->vehicle[i].localAccel.y * cDelta;
-			//pBuf->vehicle[i].localVel.z += pBuf->vehicle[i].localAccel.z * cDelta;
+			// applying 0.1x acceleration seems to help the interpolation
+			pBuf->vehicle[i].localRot.x += pBuf->vehicle[i].localRotAccel.x * cDelta * 0.1;
+			pBuf->vehicle[i].localRot.y += pBuf->vehicle[i].localRotAccel.y * cDelta * 0.1;
+			pBuf->vehicle[i].localRot.z += pBuf->vehicle[i].localRotAccel.z * cDelta * 0.1;
+			pBuf->vehicle[i].localVel.x += pBuf->vehicle[i].localAccel.x * cDelta * 0.1;
+			pBuf->vehicle[i].localVel.y += pBuf->vehicle[i].localAccel.y * cDelta * 0.1;
+			pBuf->vehicle[i].localVel.z += pBuf->vehicle[i].localAccel.z * cDelta * 0.1;
 			pBuf->vehicle[i].pos.x += ( (pBuf->vehicle[i].oriX.x * pBuf->vehicle[i].localVel.x) + 
 										(pBuf->vehicle[i].oriX.y * pBuf->vehicle[i].localVel.y) + 
 										(pBuf->vehicle[i].oriX.z * pBuf->vehicle[i].localVel.z) ) * cDelta;
@@ -322,8 +330,15 @@ void SharedMemoryMapPlugin::UpdateScoring( const ScoringInfoV2 &info ) {
 		pBuf->ambientTemp = info.mAmbientTemp;
 		pBuf->trackTemp = info.mTrackTemp;
 		pBuf->wind = { info.mWind.x, info.mWind.y, info.mWind.z };
+		pBuf->clouds = info.mDarkCloud;
+		pBuf->rain = info.mRaining;
+		pBuf->onPathWetness = info.mOnPathWetness;
+		pBuf->offPathWetness = info.mOffPathWetness;
 
-		pBuf->vehicle[128] = { 0 };
+		// Automobilista
+		pBuf->raceLaps = info.mRaceLaps;
+
+		pBuf->vehicle[128] = { { 0 } };
 		for (int i = 0; i < info.mNumVehicles; i++) {
 			// VehicleScoringInfo
 			strcpy(pBuf->vehicle[i].driverName, info.mVehicle[i].mDriverName);

@@ -127,8 +127,21 @@ struct TelemInfoV2 : public TelemInfoBase // for noobs: TelemInfoV2 contains eve
   float mLastImpactMagnitude;    // magnitude of last impact
   TelemVect3 mLastImpactPos;     // location of last impact
 
+  // Automobilista
+  unsigned char mDrsState;
+  bool mDrsActive;
+  unsigned char mPushToPassState;
+  bool mGearboxGrinding;
+  long mGearboxDamage;
+  float mLapDist;
+  unsigned char mEngineBoostMapping;
+  unsigned char mStartLight;
+
   // Future use
-  unsigned char mExpansion[64];
+  unsigned char mPadding1;
+  unsigned char mPadding2;
+  unsigned char mPadding3;
+  unsigned char mExpansion[44];
 
   // keeping this at the end of the structure to make it easier to replace in future versions
   TelemWheelV2 mWheel[4];        // wheel info (front left, front right, rear left, rear right)
@@ -268,8 +281,12 @@ struct ScoringInfoV2 : public ScoringInfoBase // for noobs: ScoringInfoV2 contai
   float mOnPathWetness;            // on main path 0.0-1.0
   float mOffPathWetness;           // on main path 0.0-1.0
 
+  // Automobilista
+  unsigned char mPadding[56];
+  long mRaceLaps;
+
   // Future use
-  unsigned char mExpansion[256];
+  unsigned char mExpansion[196];
 
   // keeping this at the end of the structure to make it easier to replace in future versions
   VehicleScoringInfoV2 *mVehicle;  // array of vehicle scoring info's

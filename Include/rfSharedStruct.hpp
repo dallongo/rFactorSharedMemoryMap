@@ -73,6 +73,18 @@ typedef enum {
   rearRight = 3
 } rfWheelIndex;
 
+typedef enum {
+  drsNotAllowed = 0,
+  drsPending = 63,
+  drsAllowed = 192
+} rfDrsState;
+
+typedef enum {
+  ptpNotAllowed = 0,
+  ptpPending = 1,
+  ptpAllowed = 2
+} rfPtpState;
+
 #pragma pack(push, 1)
 
 // Our world coordinate system is left-handed, with +y pointing up.
@@ -204,6 +216,13 @@ struct rfShared {
   float lastImpactET;           // time of last impact
   float lastImpactMagnitude;    // magnitude of last impact
   rfVec3 lastImpactPos;     // location of last impact
+  // Automobilista
+  unsigned char drsState;
+  bool drsActive;
+  unsigned char ptpState;
+  bool gearboxGrinding;
+  long gearboxDamage;
+  unsigned char engineBoostMapping;
 
   rfWheel wheel[4];        // wheel info (front left, front right, rear left, rear right)
 
@@ -231,6 +250,13 @@ struct rfShared {
   float ambientTemp;              // temperature (Celsius)
   float trackTemp;                // temperature (Celsius)
   rfVec3 wind;                // wind speed
+  float clouds;
+  float rain;
+  float onPathWetness;
+  float offPathWetness;
+
+  // Automobilista
+  long raceLaps;
 
   rfVehicleInfo vehicle[128];  // array of vehicle scoring info's
 };
