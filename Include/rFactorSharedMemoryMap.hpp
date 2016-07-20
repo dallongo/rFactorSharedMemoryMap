@@ -38,6 +38,25 @@ class InternalsPluginInfo : public PluginObjectInfo
   char m_szFullName[128];
 };
 
+// internal state tracking
+struct internalVI {
+	float lapDist;
+	rfVec3 pos;
+	rfVec3 localVel;
+	rfVec3 localAccel;
+	rfVec3 oriX;
+	rfVec3 oriY;
+	rfVec3 oriZ;
+	rfVec3 localRot;
+	rfVec3 localRotAccel;
+};
+
+struct internalSI {
+	float currentET;
+	int numVehicles;
+	char plrFileName[64];
+	internalVI vehicle[RF_SHARED_MEMORY_MAX_VSI_SIZE];
+};
 
 // This is used for the app to use the plugin for its intended purpose
 class SharedMemoryMapPlugin : public InternalsPluginV3
@@ -108,9 +127,8 @@ class SharedMemoryMapPlugin : public InternalsPluginV3
   HANDLE hMap;
   rfShared* pBuf;
   bool mapped;
-  clock_t cLastTelemUpdate;
   float cDelta;
   clock_t cLastScoringUpdate;
-  bool inSession;
   bool inRealtime;
+  internalSI scoring;
 };

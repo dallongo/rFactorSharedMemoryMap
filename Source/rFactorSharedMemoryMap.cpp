@@ -19,7 +19,7 @@
 // plugin information
 unsigned g_uPluginID          = 0;
 char     g_szPluginName[]     = PLUGIN_NAME;
-unsigned g_uPluginVersion     = 002;
+unsigned g_uPluginVersion     = 003;
 unsigned g_uPluginObjectCount = 1;
 InternalsPluginInfo g_PluginInfo;
 
@@ -119,16 +119,14 @@ void SharedMemoryMapPlugin::StartSession() {
 	if (mapped) {
 		memset(pBuf, 0, sizeof(rfShared));
 	}
-	cLastTelemUpdate = 0;
 	cLastScoringUpdate = 0;
 	cDelta = 0;
-	inSession = TRUE;
+	scoring = { 0 };
 }
 
 void SharedMemoryMapPlugin::EndSession() {
 	// zero-out buffer at end of session
 	StartSession();
-	inSession = FALSE;
 }
 
 void SharedMemoryMapPlugin::EnterRealtime() {
@@ -142,17 +140,12 @@ void SharedMemoryMapPlugin::ExitRealtime() {
 void SharedMemoryMapPlugin::UpdateTelemetry( const TelemInfoV2 &info ) {
 	if (mapped) {
 		// update clock delta
-		if (!cLastTelemUpdate) {
-			cLastTelemUpdate = clock();
-		}
-		cDelta = (float)(clock() - cLastTelemUpdate) / (float)CLOCKS_PER_SEC;
-		cLastTelemUpdate = clock();
+		cDelta = (float)(clock() - cLastScoringUpdate) / (float)CLOCKS_PER_SEC;
 
 		// TelemInfoBase
-		pBuf->deltaTime = (float)(clock() - cLastScoringUpdate) / (float)CLOCKS_PER_SEC;
+		pBuf->deltaTime = cDelta;
 		pBuf->lapNumber = info.mLapNumber;
 		pBuf->lapStartET = info.mLapStartET;
-		strcpy(pBuf->vehicleName, info.mVehicleName);
 		strcpy(pBuf->trackName, info.mTrackName);
 		pBuf->pos = { info.mPos.x, info.mPos.y, info.mPos.z };
 		pBuf->localVel = { info.mLocalVel.x, info.mLocalVel.y, info.mLocalVel.z };
@@ -210,89 +203,116 @@ void SharedMemoryMapPlugin::UpdateTelemetry( const TelemInfoV2 &info ) {
 			pBuf->wheel[i].flat = info.mWheel[i].mFlat;
 			pBuf->wheel[i].detached = info.mWheel[i].mDetached;
 		}
-
+		
 		// interpolation of scoring info
-		// ScoringInfoBase
-		pBuf->currentET += cDelta;
+		if (cDelta > 0.0f && cDelta < 0.55f) {
+			// ScoringInfoBase
+			pBuf->currentET = scoring.currentET + cDelta;
 
-		// ScoringInfoV2
-		pBuf->inRealtime = inRealtime;
+			// ScoringInfoV2
+			pBuf->inRealtime = inRealtime;
 
-		for (int i = 0; i < pBuf->numVehicles; i++) {
-			// VehicleScoringInfoV2
-			// applying acceleration only seems to make the interpolation worse since acceleration changes so quickly
-			//pBuf->vehicle[i].localRot.x += pBuf->vehicle[i].localRotAccel.x * cDelta;
-			//pBuf->vehicle[i].localRot.y += pBuf->vehicle[i].localRotAccel.y * cDelta;
-			//pBuf->vehicle[i].localRot.z += pBuf->vehicle[i].localRotAccel.z * cDelta;
-			//pBuf->vehicle[i].localVel.x += pBuf->vehicle[i].localAccel.x * cDelta;
-			//pBuf->vehicle[i].localVel.y += pBuf->vehicle[i].localAccel.y * cDelta;
-			//pBuf->vehicle[i].localVel.z += pBuf->vehicle[i].localAccel.z * cDelta;
-			pBuf->vehicle[i].pos.x += ( (pBuf->vehicle[i].oriX.x * pBuf->vehicle[i].localVel.x) + 
-										(pBuf->vehicle[i].oriX.y * pBuf->vehicle[i].localVel.y) + 
-										(pBuf->vehicle[i].oriX.z * pBuf->vehicle[i].localVel.z) ) * cDelta;
-			pBuf->vehicle[i].pos.y += ( (pBuf->vehicle[i].oriY.x * pBuf->vehicle[i].localVel.x) +
-										(pBuf->vehicle[i].oriY.y * pBuf->vehicle[i].localVel.y) +
-										(pBuf->vehicle[i].oriY.z * pBuf->vehicle[i].localVel.z) ) * cDelta;
-			pBuf->vehicle[i].pos.z += ( (pBuf->vehicle[i].oriZ.x * pBuf->vehicle[i].localVel.x) +
-										(pBuf->vehicle[i].oriZ.y * pBuf->vehicle[i].localVel.y) +
-										(pBuf->vehicle[i].oriZ.z * pBuf->vehicle[i].localVel.z) ) * cDelta;
-			// rotate and normalize orientation vectors (normalizing shouldn't be necessary if this is correct)
-			rfVec3 oriX = { 0 };
-			rfVec3 oriY = { 0 };
-			rfVec3 oriZ = { 0 };
-			float oriXlen = 0;
-			rfVec3 wRot = { (oriX.x * pBuf->vehicle[i].localRot.x) + (oriX.y * pBuf->vehicle[i].localRot.y) + (oriX.z * pBuf->vehicle[i].localRot.z),
-							(oriY.x * pBuf->vehicle[i].localRot.x) + (oriY.y * pBuf->vehicle[i].localRot.y) + (oriY.z * pBuf->vehicle[i].localRot.z), 
-							(oriZ.x * pBuf->vehicle[i].localRot.x) + (oriZ.y * pBuf->vehicle[i].localRot.y) + (oriZ.z * pBuf->vehicle[i].localRot.z) };
-			// rotate by z
-			oriZ.x = pBuf->vehicle[i].oriX.x * cosf(wRot.z * cDelta) - pBuf->vehicle[i].oriX.y * sinf(wRot.z * cDelta);
-			oriZ.y = pBuf->vehicle[i].oriX.x * sinf(wRot.z * cDelta) + pBuf->vehicle[i].oriX.y * cosf(wRot.z * cDelta);
-			oriZ.z = pBuf->vehicle[i].oriX.z;
-			// rotate by y
-			oriY.x = oriZ.x * cosf(wRot.y * cDelta) + oriZ.z * sinf(wRot.y * cDelta);
-			oriY.y = oriZ.y;
-			oriY.z = oriZ.z * cosf(wRot.y * cDelta) - oriZ.x * sinf(wRot.y * cDelta);
-			// rotate by x
-			oriX.x = oriY.x;
-			oriX.y = oriY.y * cosf(wRot.x * cDelta) - oriY.z * sinf(wRot.x * cDelta);
-			oriX.z = oriY.y * sinf(wRot.x * cDelta) + oriY.z * cosf(wRot.x * cDelta);
-			oriXlen = sqrtf(oriX.x * oriX.x + oriX.y * oriX.y + oriX.z * oriX.z);
-			pBuf->vehicle[i].oriX = { oriX.x / oriXlen, oriX.y / oriXlen, oriX.z / oriXlen };
-			// rotate by z
-			oriZ.x = pBuf->vehicle[i].oriY.x * cosf(wRot.z * cDelta) - pBuf->vehicle[i].oriY.y * sinf(wRot.z * cDelta);
-			oriZ.y = pBuf->vehicle[i].oriY.x * sinf(wRot.z * cDelta) + pBuf->vehicle[i].oriY.y * cosf(wRot.z * cDelta);
-			oriZ.z = pBuf->vehicle[i].oriY.z;
-			// rotate by y
-			oriY.x = oriZ.x * cosf(wRot.y * cDelta) + oriZ.z * sinf(wRot.y * cDelta);
-			oriY.y = oriZ.y;
-			oriY.z = oriZ.z * cosf(wRot.y * cDelta) - oriZ.x * sinf(wRot.y * cDelta);
-			// rotate by x
-			oriX.x = oriY.x;
-			oriX.y = oriY.y * cosf(wRot.x * cDelta) - oriY.z * sinf(wRot.x * cDelta);
-			oriX.z = oriY.y * sinf(wRot.x * cDelta) + oriY.z * cosf(wRot.x * cDelta);
-			oriXlen = sqrtf(oriX.x * oriX.x + oriX.y * oriX.y + oriX.z * oriX.z);
-			pBuf->vehicle[i].oriY = { oriX.x / oriXlen, oriX.y / oriXlen, oriX.z / oriXlen };
-			// rotate by z
-			oriZ.x = pBuf->vehicle[i].oriZ.x * cosf(wRot.z * cDelta) - pBuf->vehicle[i].oriZ.y * sinf(wRot.z * cDelta);
-			oriZ.y = pBuf->vehicle[i].oriZ.x * sinf(wRot.z * cDelta) + pBuf->vehicle[i].oriZ.y * cosf(wRot.z * cDelta);
-			oriZ.z = pBuf->vehicle[i].oriZ.z;
-			// rotate by y
-			oriY.x = oriZ.x * cosf(wRot.y * cDelta) + oriZ.z * sinf(wRot.y * cDelta);
-			oriY.y = oriZ.y;
-			oriY.z = oriZ.z * cosf(wRot.y * cDelta) - oriZ.x * sinf(wRot.y * cDelta);
-			// rotate by x
-			oriX.x = oriY.x;
-			oriX.y = oriY.y * cosf(wRot.x * cDelta) - oriY.z * sinf(wRot.x * cDelta);
-			oriX.z = oriY.y * sinf(wRot.x * cDelta) + oriY.z * cosf(wRot.x * cDelta);
-			oriXlen = sqrtf(oriX.x * oriX.x + oriX.y * oriX.y + oriX.z * oriX.z);
-			pBuf->vehicle[i].oriZ = { oriX.x / oriXlen, oriX.y / oriXlen, oriX.z / oriXlen };
-			// interpolate speed
-			pBuf->vehicle[i].speed = sqrtf( (pBuf->vehicle[i].localVel.x * pBuf->vehicle[i].localVel.x) +
-											(pBuf->vehicle[i].localVel.y * pBuf->vehicle[i].localVel.y) +
-											(pBuf->vehicle[i].localVel.z * pBuf->vehicle[i].localVel.z) );
+			for (int i = 0; i < RF_SHARED_MEMORY_MAX_VSI_SIZE; i++) {
+				if (i < scoring.numVehicles) {
+					// VehicleScoringInfoV2
+					// applying 0.05x acceleration seems to help the interpolation
+					rfVec3 localRotAccel = { scoring.vehicle[i].localRotAccel.x, scoring.vehicle[i].localRotAccel.y, scoring.vehicle[i].localRotAccel.z };
+					rfVec3 localAccel = { scoring.vehicle[i].localAccel.x, scoring.vehicle[i].localAccel.y, scoring.vehicle[i].localAccel.z };
+					rfVec3 localRot = { scoring.vehicle[i].localRot.x, scoring.vehicle[i].localRot.y, scoring.vehicle[i].localRot.z };
+					rfVec3 localVel = { scoring.vehicle[i].localVel.x, scoring.vehicle[i].localVel.y, scoring.vehicle[i].localVel.z };
+					
+					localRot.x += localRotAccel.x * cDelta * 0.05f;
+					localRot.y += localRotAccel.y * cDelta * 0.05f;
+					localRot.z += localRotAccel.z * cDelta * 0.05f;
 
-			// VehicleScoringInfo
-			pBuf->vehicle[i].lapDist -= pBuf->vehicle[i].localVel.z * cDelta;
+					localVel.x += localAccel.x * cDelta * 0.05f;
+					localVel.y += localAccel.y * cDelta * 0.05f;
+					localVel.z += localAccel.z * cDelta * 0.05f;
+
+					// rotate and normalize orientation vectors (normalizing shouldn't be necessary if this is correct)
+					rfVec3 oriX = { scoring.vehicle[i].oriX.x, scoring.vehicle[i].oriX.y, scoring.vehicle[i].oriX.z };
+					rfVec3 oriY = { scoring.vehicle[i].oriY.x, scoring.vehicle[i].oriY.y, scoring.vehicle[i].oriY.z };
+					rfVec3 oriZ = { scoring.vehicle[i].oriZ.x, scoring.vehicle[i].oriZ.y, scoring.vehicle[i].oriZ.z };
+					rfVec3 wRot = { ((oriX.x * localRot.x) + (oriX.y * localRot.y) + (oriX.z * localRot.z)) * cDelta,
+						((oriY.x * localRot.x) + (oriY.y * localRot.y) + (oriY.z * localRot.z)) * cDelta,
+						((oriZ.x * localRot.x) + (oriZ.y * localRot.y) + (oriZ.z * localRot.z)) * cDelta };
+					rfVec3 tmpX, tmpY, tmpZ;
+					float tmpLen;
+					
+					// X
+					// rotate by z
+					tmpZ.x = oriX.x * cosf(wRot.z) - oriX.y * -sinf(wRot.z);
+					tmpZ.y = oriX.x * -sinf(wRot.z) + oriX.y * cosf(wRot.z);
+					tmpZ.z = oriX.z;
+					// rotate by y
+					tmpY.x = tmpZ.x * cosf(wRot.y) + tmpZ.z * -sinf(wRot.y);
+					tmpY.y = tmpZ.y;
+					tmpY.z = tmpZ.z * cosf(wRot.y) - tmpZ.x * -sinf(wRot.y);
+					// rotate by x
+					tmpX.x = tmpY.x;
+					tmpX.y = tmpY.y * cosf(wRot.x) - tmpY.z * -sinf(wRot.x);
+					tmpX.z = tmpY.y * -sinf(wRot.x) + tmpY.z * cosf(wRot.x);
+					tmpLen = sqrtf(tmpX.x * tmpX.x + tmpX.y * tmpX.y + tmpX.z * tmpX.z);
+					if (tmpLen > 0) {
+						oriX = { tmpX.x / tmpLen, tmpX.y / tmpLen, tmpX.z / tmpLen };
+					}
+
+					// Y
+					// rotate by z
+					tmpZ.x = oriY.x * cosf(wRot.z) - oriY.y * -sinf(wRot.z);
+					tmpZ.y = oriY.x * -sinf(wRot.z) + oriY.y * cosf(wRot.z);
+					tmpZ.z = oriY.z;
+					// rotate by y
+					tmpY.x = tmpZ.x * cosf(wRot.y) + tmpZ.z * -sinf(wRot.y);
+					tmpY.y = tmpZ.y;
+					tmpY.z = tmpZ.z * cosf(wRot.y) - tmpZ.x * -sinf(wRot.y);
+					// rotate by x
+					tmpX.x = tmpY.x;
+					tmpX.y = tmpY.y * cosf(wRot.x) - tmpY.z * -sinf(wRot.x);
+					tmpX.z = tmpY.y * -sinf(wRot.x) + tmpY.z * cosf(wRot.x);
+					tmpLen = sqrtf(tmpX.x * tmpX.x + tmpX.y * tmpX.y + tmpX.z * tmpX.z);
+					if (tmpLen > 0) {
+						oriY = { tmpX.x / tmpLen, tmpX.y / tmpLen, tmpX.z / tmpLen };
+					}
+
+					// Z
+					// rotate by z
+					tmpZ.x = oriZ.x * cosf(wRot.z) - oriZ.y * -sinf(wRot.z);
+					tmpZ.y = oriZ.x * -sinf(wRot.z) + oriZ.y * cosf(wRot.z);
+					tmpZ.z = oriZ.z;
+					// rotate by y
+					tmpY.x = tmpZ.x * cosf(wRot.y) + tmpZ.z * -sinf(wRot.y);
+					tmpY.y = tmpZ.y;
+					tmpY.z = tmpZ.z * cosf(wRot.y) - tmpZ.x * -sinf(wRot.y);
+					// rotate by x
+					tmpX.x = tmpY.x;
+					tmpX.y = tmpY.y * cosf(wRot.x) - tmpY.z * -sinf(wRot.x);
+					tmpX.z = tmpY.y * -sinf(wRot.x) + tmpY.z * cosf(wRot.x);
+					tmpLen = sqrtf(tmpX.x * tmpX.x + tmpX.y * tmpX.y + tmpX.z * tmpX.z);
+					if (tmpLen > 0) {
+						oriZ = { tmpX.x / tmpLen, tmpX.y / tmpLen, tmpX.z / tmpLen };
+					}
+					
+					// position
+					rfVec3 pos = { scoring.vehicle[i].pos.x, scoring.vehicle[i].pos.y, scoring.vehicle[i].pos.z };
+					pos.x += ((oriX.x * localVel.x) + (oriX.y * localVel.y) + (oriX.z * localVel.z)) * cDelta;
+					pos.y += ((oriY.x * localVel.x) + (oriY.y * localVel.y) + (oriY.z * localVel.z)) * cDelta;
+					pos.z += ((oriZ.x * localVel.x) + (oriZ.y * localVel.y) + (oriZ.z * localVel.z)) * cDelta;
+					pBuf->vehicle[i].pos = { pos.x, pos.y, pos.z };
+
+					pBuf->vehicle[i].yaw = atan2f(oriZ.x, oriZ.z);
+					pBuf->vehicle[i].pitch = atan2f(-oriY.z, sqrtf(oriX.z * oriX.z + oriZ.z * oriZ.z));
+					pBuf->vehicle[i].roll = atan2f(oriY.x, sqrtf(oriX.x * oriX.x + oriZ.x * oriZ.x));
+
+					// interpolate speed
+					pBuf->vehicle[i].speed = sqrtf((localVel.x * localVel.x) + (localVel.y * localVel.y) + (localVel.z * localVel.z));
+
+					// VehicleScoringInfo
+					pBuf->vehicle[i].lapDist = scoring.vehicle[i].lapDist - localVel.z * cDelta;
+
+					continue;
+				}
+			}
 		}
 	}
 }
@@ -300,6 +320,29 @@ void SharedMemoryMapPlugin::UpdateTelemetry( const TelemInfoV2 &info ) {
 void SharedMemoryMapPlugin::UpdateScoring( const ScoringInfoV2 &info ) {
 	if (mapped) {
 		cLastScoringUpdate = clock();
+
+		pBuf->deltaTime = 0;
+
+		// update internal state
+		scoring.currentET = info.mCurrentET;
+		scoring.numVehicles = info.mNumVehicles;
+		strcpy(scoring.plrFileName, info.mPlrFileName);
+		for (int i = 0; i < RF_SHARED_MEMORY_MAX_VSI_SIZE; i++) {
+			if (i < scoring.numVehicles) {
+				scoring.vehicle[i].lapDist = info.mVehicle[i].mLapDist;
+				scoring.vehicle[i].localAccel = { info.mVehicle[i].mLocalAccel.x, info.mVehicle[i].mLocalAccel.y, info.mVehicle[i].mLocalAccel.z };
+				scoring.vehicle[i].localRot = { info.mVehicle[i].mLocalRot.x, info.mVehicle[i].mLocalRot.y, info.mVehicle[i].mLocalRot.z };
+				scoring.vehicle[i].localRotAccel = { info.mVehicle[i].mLocalRotAccel.x, info.mVehicle[i].mLocalRotAccel.y, info.mVehicle[i].mLocalRotAccel.z };
+				scoring.vehicle[i].localVel = { info.mVehicle[i].mLocalVel.x, info.mVehicle[i].mLocalVel.y, info.mVehicle[i].mLocalVel.z };
+				scoring.vehicle[i].oriX = { info.mVehicle[i].mOriX.x, info.mVehicle[i].mOriX.y, info.mVehicle[i].mOriX.z };
+				scoring.vehicle[i].oriY = { info.mVehicle[i].mOriY.x, info.mVehicle[i].mOriY.y, info.mVehicle[i].mOriY.z };
+				scoring.vehicle[i].oriZ = { info.mVehicle[i].mOriZ.x, info.mVehicle[i].mOriZ.y, info.mVehicle[i].mOriZ.z };
+				scoring.vehicle[i].pos = { info.mVehicle[i].mPos.x, info.mVehicle[i].mPos.y, info.mVehicle[i].mPos.z };
+				continue;
+			}
+			scoring.vehicle[i] = { 0 };
+		}
+
 		// ScoringInfoBase
 		pBuf->session = info.mSession;
 		pBuf->currentET = info.mCurrentET;
@@ -318,55 +361,56 @@ void SharedMemoryMapPlugin::UpdateScoring( const ScoringInfoV2 &info ) {
 		pBuf->numRedLights = info.mNumRedLights;
 		pBuf->inRealtime = inRealtime;
 		strcpy(pBuf->playerName, info.mPlayerName);
-		strcpy(pBuf->plrFileName, info.mPlrFileName);
 		pBuf->ambientTemp = info.mAmbientTemp;
 		pBuf->trackTemp = info.mTrackTemp;
 		pBuf->wind = { info.mWind.x, info.mWind.y, info.mWind.z };
 
-		pBuf->vehicle[128] = { 0 };
-		for (int i = 0; i < info.mNumVehicles; i++) {
-			// VehicleScoringInfo
-			strcpy(pBuf->vehicle[i].driverName, info.mVehicle[i].mDriverName);
-			strcpy(pBuf->vehicle[i].vehicleName, info.mVehicle[i].mVehicleName);
-			pBuf->vehicle[i].totalLaps = info.mVehicle[i].mTotalLaps;
-			pBuf->vehicle[i].sector = info.mVehicle[i].mSector;
-			pBuf->vehicle[i].finishStatus = info.mVehicle[i].mFinishStatus;
-			pBuf->vehicle[i].lapDist = info.mVehicle[i].mLapDist;
-			pBuf->vehicle[i].pathLateral = info.mVehicle[i].mPathLateral;
-			pBuf->vehicle[i].trackEdge = info.mVehicle[i].mTrackEdge;
-			pBuf->vehicle[i].bestSector1 = info.mVehicle[i].mBestSector1;
-			pBuf->vehicle[i].bestSector2 = info.mVehicle[i].mBestSector2;
-			pBuf->vehicle[i].bestLapTime = info.mVehicle[i].mBestLapTime;
-			pBuf->vehicle[i].lastSector1 = info.mVehicle[i].mLastSector1;
-			pBuf->vehicle[i].lastSector2 = info.mVehicle[i].mLastSector2;
-			pBuf->vehicle[i].lastLapTime = info.mVehicle[i].mLastLapTime;
-			pBuf->vehicle[i].curSector1 = info.mVehicle[i].mCurSector1;
-			pBuf->vehicle[i].curSector2 = info.mVehicle[i].mCurSector2;
-			pBuf->vehicle[i].numPitstops = info.mVehicle[i].mNumPitstops;
-			pBuf->vehicle[i].numPenalties = info.mVehicle[i].mNumPenalties;
+		for (int i = 0; i < RF_SHARED_MEMORY_MAX_VSI_SIZE; i++) {
+			if (i < info.mNumVehicles) {
+				// VehicleScoringInfo
+				strcpy(pBuf->vehicle[i].driverName, info.mVehicle[i].mDriverName);
+				pBuf->vehicle[i].totalLaps = info.mVehicle[i].mTotalLaps;
+				pBuf->vehicle[i].sector = info.mVehicle[i].mSector;
+				pBuf->vehicle[i].finishStatus = info.mVehicle[i].mFinishStatus;
+				pBuf->vehicle[i].lapDist = info.mVehicle[i].mLapDist;
+				pBuf->vehicle[i].pathLateral = info.mVehicle[i].mPathLateral;
+				pBuf->vehicle[i].trackEdge = info.mVehicle[i].mTrackEdge;
+				pBuf->vehicle[i].bestSector1 = info.mVehicle[i].mBestSector1;
+				pBuf->vehicle[i].bestSector2 = info.mVehicle[i].mBestSector2;
+				pBuf->vehicle[i].bestLapTime = info.mVehicle[i].mBestLapTime;
+				pBuf->vehicle[i].lastSector1 = info.mVehicle[i].mLastSector1;
+				pBuf->vehicle[i].lastSector2 = info.mVehicle[i].mLastSector2;
+				pBuf->vehicle[i].lastLapTime = info.mVehicle[i].mLastLapTime;
+				pBuf->vehicle[i].curSector1 = info.mVehicle[i].mCurSector1;
+				pBuf->vehicle[i].curSector2 = info.mVehicle[i].mCurSector2;
+				pBuf->vehicle[i].numPitstops = info.mVehicle[i].mNumPitstops;
+				pBuf->vehicle[i].numPenalties = info.mVehicle[i].mNumPenalties;
 
-			// VehicleScoringInfoV2
-			pBuf->vehicle[i].isPlayer = info.mVehicle[i].mIsPlayer;
-			pBuf->vehicle[i].control = info.mVehicle[i].mControl;
-			pBuf->vehicle[i].inPits = info.mVehicle[i].mInPits;
-			pBuf->vehicle[i].place = info.mVehicle[i].mPlace;
-			strcpy(pBuf->vehicle[i].vehicleClass, info.mVehicle[i].mVehicleClass);
-			pBuf->vehicle[i].timeBehindNext = info.mVehicle[i].mTimeBehindNext;
-			pBuf->vehicle[i].lapsBehindNext = info.mVehicle[i].mLapsBehindNext;
-			pBuf->vehicle[i].timeBehindLeader = info.mVehicle[i].mTimeBehindLeader;
-			pBuf->vehicle[i].lapsBehindLeader = info.mVehicle[i].mLapsBehindLeader;
-			pBuf->vehicle[i].lapStartET = info.mVehicle[i].mLapStartET;
-			pBuf->vehicle[i].pos = { info.mVehicle[i].mPos.x, info.mVehicle[i].mPos.y, info.mVehicle[i].mPos.z };
-			pBuf->vehicle[i].localVel = { info.mVehicle[i].mLocalVel.x, info.mVehicle[i].mLocalVel.y, info.mVehicle[i].mLocalVel.z };
-			pBuf->vehicle[i].localAccel = { info.mVehicle[i].mLocalAccel.x, info.mVehicle[i].mLocalAccel.y, info.mVehicle[i].mLocalAccel.z };
-			pBuf->vehicle[i].oriX = { info.mVehicle[i].mOriX.x, info.mVehicle[i].mOriX.y, info.mVehicle[i].mOriX.z };
-			pBuf->vehicle[i].oriY = { info.mVehicle[i].mOriY.x, info.mVehicle[i].mOriY.y, info.mVehicle[i].mOriY.z };
-			pBuf->vehicle[i].oriZ = { info.mVehicle[i].mOriZ.x, info.mVehicle[i].mOriZ.y, info.mVehicle[i].mOriZ.z };
-			pBuf->vehicle[i].localRot = { info.mVehicle[i].mLocalRot.x, info.mVehicle[i].mLocalRot.y, info.mVehicle[i].mLocalRot.z };
-			pBuf->vehicle[i].localRotAccel = { info.mVehicle[i].mLocalRotAccel.x, info.mVehicle[i].mLocalRotAccel.y, info.mVehicle[i].mLocalRotAccel.z };
-			pBuf->vehicle[i].speed = sqrtf((info.mVehicle[i].mLocalVel.x * info.mVehicle[i].mLocalVel.x) +
-				(info.mVehicle[i].mLocalVel.y * info.mVehicle[i].mLocalVel.y) +
-				(info.mVehicle[i].mLocalVel.z * info.mVehicle[i].mLocalVel.z));
+				// VehicleScoringInfoV2
+				pBuf->vehicle[i].isPlayer = info.mVehicle[i].mIsPlayer;
+				pBuf->vehicle[i].control = info.mVehicle[i].mControl;
+				pBuf->vehicle[i].inPits = info.mVehicle[i].mInPits;
+				pBuf->vehicle[i].place = info.mVehicle[i].mPlace;
+				strcpy(pBuf->vehicle[i].vehicleClass, info.mVehicle[i].mVehicleClass);
+				pBuf->vehicle[i].timeBehindNext = info.mVehicle[i].mTimeBehindNext;
+				pBuf->vehicle[i].lapsBehindNext = info.mVehicle[i].mLapsBehindNext;
+				pBuf->vehicle[i].timeBehindLeader = info.mVehicle[i].mTimeBehindLeader;
+				pBuf->vehicle[i].lapsBehindLeader = info.mVehicle[i].mLapsBehindLeader;
+				pBuf->vehicle[i].lapStartET = info.mVehicle[i].mLapStartET;
+				pBuf->vehicle[i].pos = { info.mVehicle[i].mPos.x, info.mVehicle[i].mPos.y, info.mVehicle[i].mPos.z };
+				pBuf->vehicle[i].yaw = atan2f(info.mVehicle[i].mOriZ.x, info.mVehicle[i].mOriZ.z);
+				pBuf->vehicle[i].pitch = atan2f(-info.mVehicle[i].mOriY.z, 
+					sqrtf(info.mVehicle[i].mOriX.z * info.mVehicle[i].mOriX.z + 
+						info.mVehicle[i].mOriZ.z * info.mVehicle[i].mOriZ.z));
+				pBuf->vehicle[i].roll = atan2f(info.mVehicle[i].mOriY.x, 
+					sqrtf(info.mVehicle[i].mOriX.x * info.mVehicle[i].mOriX.x + 
+						info.mVehicle[i].mOriZ.x * info.mVehicle[i].mOriZ.x));
+				pBuf->vehicle[i].speed = sqrtf((info.mVehicle[i].mLocalVel.x * info.mVehicle[i].mLocalVel.x) +
+					(info.mVehicle[i].mLocalVel.y * info.mVehicle[i].mLocalVel.y) +
+					(info.mVehicle[i].mLocalVel.z * info.mVehicle[i].mLocalVel.z));
+				continue;
+			}
+			pBuf->vehicle[i] = { 0 };
 		}
 	}
 }

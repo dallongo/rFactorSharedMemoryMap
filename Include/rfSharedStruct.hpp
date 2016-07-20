@@ -11,6 +11,7 @@ This means that you need to watch your types very closely!
 #pragma once
 
 #define RF_SHARED_MEMORY_NAME "$rFactorShared$"
+#define RF_SHARED_MEMORY_MAX_VSI_SIZE 64
 
 typedef enum {
   garage = 0,
@@ -109,7 +110,6 @@ struct rfWheel {
 // scoring info only updates twice per second (values interpolated when deltaTime > 0)!
 struct rfVehicleInfo {
   char driverName[32];          // driver name
-  char vehicleName[64];         // vehicle name
   short totalLaps;              // laps completed
   signed char sector;           // 0=sector3, 1=sector1, 2=sector2 (don't ask why)
   signed char finishStatus;     // 0=none, 1=finished, 2=dnf, 3=dq
@@ -144,17 +144,12 @@ struct rfVehicleInfo {
 
   // Position and derivatives
   rfVec3 pos;					// world position in meters
-  rfVec3 localVel;          // velocity (meters/sec) in local vehicle coordinates
-  rfVec3 localAccel;        // acceleration (meters/sec^2) in local vehicle coordinates
-  
-  // Orientation and derivatives
-  rfVec3 oriX;              // top row of orientation matrix (also converts local vehicle vectors into world X using dot product)
-  rfVec3 oriY;              // mid row of orientation matrix (also converts local vehicle vectors into world Y using dot product)
-  rfVec3 oriZ;              // bot row of orientation matrix (also converts local vehicle vectors into world Z using dot product)
-  rfVec3 localRot;          // rotation (radians/sec) in local vehicle coordinates
-  rfVec3 localRotAccel;     // rotational acceleration (radians/sec^2) in local vehicle coordinates
 
-  float speed;				// meters/sec
+  float yaw;					// rad, use (360-yaw*57.2978)%360 for heading in degrees
+  float pitch;					// rad
+  float roll;					// rad
+
+  float speed;					// meters/sec
 };
 
 struct rfShared {
@@ -162,7 +157,6 @@ struct rfShared {
   float deltaTime;              // time since last scoring update (seconds)
   long lapNumber;               // current lap number
   float lapStartET;             // time this lap was started
-  char vehicleName[64];         // current vehicle name
   char trackName[64];           // current track name
 
   // Position and derivatives
@@ -225,14 +219,13 @@ struct rfShared {
   unsigned char numRedLights;     // number of red lights in start sequence
   bool inRealtime;                // in realtime as opposed to at the monitor
   char playerName[32];            // player name (including possible multiplayer override)
-  char plrFileName[64];           // may be encoded to be a legal filename
 
   // weather
   float ambientTemp;              // temperature (Celsius)
   float trackTemp;                // temperature (Celsius)
   rfVec3 wind;                // wind speed
 
-  rfVehicleInfo vehicle[128];  // array of vehicle scoring info's
+  rfVehicleInfo vehicle[RF_SHARED_MEMORY_MAX_VSI_SIZE];  // array of vehicle scoring info's
 };
 
 #pragma pack(pop)
