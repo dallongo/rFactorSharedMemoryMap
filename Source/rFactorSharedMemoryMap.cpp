@@ -221,21 +221,21 @@ void SharedMemoryMapPlugin::UpdateTelemetry( const TelemInfoV2 &info ) {
 					rfVec3 localRot = { scoring.vehicle[i].localRot.x, scoring.vehicle[i].localRot.y, scoring.vehicle[i].localRot.z };
 					rfVec3 localVel = { scoring.vehicle[i].localVel.x, scoring.vehicle[i].localVel.y, scoring.vehicle[i].localVel.z };
 					
-					localRot.x += localRotAccel.x * cDelta * 0.05f;
-					localRot.y += localRotAccel.y * cDelta * 0.05f;
-					localRot.z += localRotAccel.z * cDelta * 0.05f;
+					localRot.x += localRotAccel.x * cDelta * RF_SHARED_MEMORY_ACC_SMOOTH_FACTOR;
+					localRot.y += localRotAccel.y * cDelta * RF_SHARED_MEMORY_ACC_SMOOTH_FACTOR;
+					localRot.z += localRotAccel.z * cDelta * RF_SHARED_MEMORY_ACC_SMOOTH_FACTOR;
 
-					localVel.x += localAccel.x * cDelta * 0.05f;
-					localVel.y += localAccel.y * cDelta * 0.05f;
-					localVel.z += localAccel.z * cDelta * 0.05f;
+					localVel.x += localAccel.x * cDelta * RF_SHARED_MEMORY_ACC_SMOOTH_FACTOR;
+					localVel.y += localAccel.y * cDelta * RF_SHARED_MEMORY_ACC_SMOOTH_FACTOR;
+					localVel.z += localAccel.z * cDelta * RF_SHARED_MEMORY_ACC_SMOOTH_FACTOR;
 
 					// rotate and normalize orientation vectors (normalizing shouldn't be necessary if this is correct)
 					rfVec3 oriX = { scoring.vehicle[i].oriX.x, scoring.vehicle[i].oriX.y, scoring.vehicle[i].oriX.z };
 					rfVec3 oriY = { scoring.vehicle[i].oriY.x, scoring.vehicle[i].oriY.y, scoring.vehicle[i].oriY.z };
 					rfVec3 oriZ = { scoring.vehicle[i].oriZ.x, scoring.vehicle[i].oriZ.y, scoring.vehicle[i].oriZ.z };
-					rfVec3 wRot = { ((oriX.x * localRot.x) + (oriX.y * localRot.y) + (oriX.z * localRot.z)) * cDelta,
-						((oriY.x * localRot.x) + (oriY.y * localRot.y) + (oriY.z * localRot.z)) * cDelta,
-						((oriZ.x * localRot.x) + (oriZ.y * localRot.y) + (oriZ.z * localRot.z)) * cDelta };
+					rfVec3 wRot = { ((oriX.x * localRot.x) + (oriX.y * localRot.y) + (oriX.z * localRot.z)) * cDelta * RF_SHARED_MEMORY_ROT_SMOOTH_FACTOR,
+						((oriY.x * localRot.x) + (oriY.y * localRot.y) + (oriY.z * localRot.z)) * cDelta * RF_SHARED_MEMORY_ROT_SMOOTH_FACTOR,
+						((oriZ.x * localRot.x) + (oriZ.y * localRot.y) + (oriZ.z * localRot.z)) * cDelta * RF_SHARED_MEMORY_ROT_SMOOTH_FACTOR };
 					rfVec3 tmpX, tmpY, tmpZ;
 					float tmpLen;
 					

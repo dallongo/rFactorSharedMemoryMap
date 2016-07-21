@@ -12,6 +12,8 @@ This means that you need to watch your types very closely!
 
 #define RF_SHARED_MEMORY_NAME "$rFactorShared$"
 #define RF_SHARED_MEMORY_MAX_VSI_SIZE 64
+#define RF_SHARED_MEMORY_ACC_SMOOTH_FACTOR 0.02f
+#define RF_SHARED_MEMORY_ROT_SMOOTH_FACTOR 0.65f
 
 typedef enum {
   garage = 0,
