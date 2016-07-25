@@ -11,6 +11,7 @@ This means that you need to watch your types very closely!
 #pragma once
 
 #define RF_SHARED_MEMORY_NAME "$rFactorShared$"
+#define RF_SHARED_MEMORY_VERSION "3.0.0.0"
 #define RF_SHARED_MEMORY_MAX_VSI_SIZE 64
 #define RF_SHARED_MEMORY_ACC_SMOOTH_FACTOR 0.02f
 #define RF_SHARED_MEMORY_ROT_SMOOTH_FACTOR 0.65f
@@ -155,6 +156,7 @@ struct rfVehicleInfo {
 };
 
 struct rfShared {
+  char version[8];				// API version
   // Time
   float deltaTime;              // time since last scoring update (seconds)
   long lapNumber;               // current lap number
