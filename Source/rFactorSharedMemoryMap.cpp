@@ -73,12 +73,22 @@ PluginObjectInfo *SharedMemoryMapPlugin::GetInfo() {
 }
 
 void SharedMemoryMapPlugin::Startup() {
+	char tag[256] = {};
+	strcpy(tag, RF_SHARED_MEMORY_NAME);
+	char exe[1024] = {};
+	GetModuleFileName(NULL, exe, sizeof(exe));
+	char pid[8] = {};
+	sprintf(pid, "%d", GetCurrentProcessId());
+	// append processId for dedicated server to allow multiple instances
+	if (strstr(exe, "AMS Dedicated.exe") != NULL) {
+		strcat(tag, pid);
+	}
 	// init handle and try to create, read if existing
 	hMap = INVALID_HANDLE_VALUE;
-	hMap = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(rfShared), TEXT(RF_SHARED_MEMORY_NAME));
+	hMap = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(rfShared), TEXT(tag));
 	if (hMap == NULL) {
 		if (GetLastError() == (DWORD)183) {
-			hMap = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, TEXT(RF_SHARED_MEMORY_NAME));
+			hMap = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, TEXT(tag));
 			if (hMap == NULL) {
 				// unable to create or read existing
 				mapped = FALSE;
@@ -96,6 +106,7 @@ void SharedMemoryMapPlugin::Startup() {
 	mapped = TRUE;
 	if (mapped) {
 		memset(pBuf, 0, sizeof(rfShared));
+		strcpy(pBuf->version, RF_SHARED_MEMORY_VERSION);
 	}
 	return;
 }
@@ -118,6 +129,7 @@ void SharedMemoryMapPlugin::StartSession() {
 	// zero-out buffer at start of session
 	if (mapped) {
 		memset(pBuf, 0, sizeof(rfShared));
+		strcpy(pBuf->version, RF_SHARED_MEMORY_VERSION);
 	}
 	cLastScoringUpdate = 0;
 	cDelta = 0;
