@@ -80,7 +80,7 @@ void SharedMemoryMapPlugin::Startup() {
 	char pid[8] = {};
 	sprintf(pid, "%d", GetCurrentProcessId());
 	// append processId for dedicated server to allow multiple instances
-	if (strstr(exe, "AMS Dedicated.exe") != NULL) {
+	if (strstr(exe, "Dedicated.exe") != NULL) {
 		strcat(tag, pid);
 	}
 	// init handle and try to create, read if existing
